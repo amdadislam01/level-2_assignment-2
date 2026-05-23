@@ -1,112 +1,173 @@
-# 🚼 DevPulse – Internal Tech Issue & Feature Tracker
+# ⚡ DevPulse – Internal Tech Issue & Feature Tracker
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Express.js](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com/)
 
 DevPulse is a high-performance, developer-focused collaborative platform designed for engineering teams to report bugs, suggest features, and track technical resolutions. 
 
-This project features a secure role-based authentication system, a modular routing architecture, and a fully relational PostgreSQL database backend utilizing native raw SQL queries.
+This application features a highly secure Role-Based Access Control (RBAC) authentication system, a modular routing architecture, and a fully relational PostgreSQL database backend leveraging **native raw SQL queries** (completely ORM-free) for raw performance.
 
 ---
 
-### 🛡️ 1. True Type-Safety with Global Declaration Merging
-- **AI-Free Routing:** Avoids sloppy `as any` typecasts or manual casts inside routes and controllers.
-- **Global Express Merging:** Implements TypeScript declaration merging in `auth.middleware.ts` to extend the standard Express `Request` interface globally:
-  ```typescript
-  declare global {
-    namespace Express {
-      interface Request {
-        user?: UserPayload;
-      }
+### 🌐 Deployment Links
+* **Live API Deployment:** [https://level-2-assignment-2-six.vercel.app/](https://level-2-assignment-2-six.vercel.app/)
+* **Health Check Endpoint:** [https://level-2-assignment-2-six.vercel.app/health](https://level-2-assignment-2-six.vercel.app/health)
+
+---
+
+## ⚡ Core Engineering Highlights
+
+### 🛡️ 1. True Compile-Time Type-Safety with Global Declaration Merging
+To prevent type-casting shortcuts (e.g., `as any`) inside route handlers and controllers, this project leverages TypeScript's declaration merging. We extend the standard Express `Request` interface globally in `auth.middleware.ts` to include the decoded JWT payload:
+```typescript
+declare global {
+  namespace Express {
+    interface Request {
+      user?: UserPayload;
     }
   }
-  ```
-- **Result:** All Express route handlers and middleware functions match native signatures seamlessly with complete, end-to-end compile-time safety.
+}
+```
+* **Impact:** Seamless compile-time verification across all routes, handlers, and middlewares.
 
-### ⚡ 2. High-Performance SQL Joins (Zero N+1 Queries)
-- **Single-Roundtrip Retrieval:** Eliminates the classic N+1 database mapping problem where separate queries were fired for issues and reporter details.
-- **Database-Level Joins:** Uses highly optimized, native SQL `JOIN` statements in the database query layer:
-  ```sql
-  SELECT 
-    i.id, i.title, i.description, i.type, i.status, i.created_at, i.updated_at,
-    u.id AS reporter_id, u.name AS reporter_name, u.role AS reporter_role
-  FROM issues i
-  JOIN users u ON i.reporter_id = u.id
-  ```
-- **Result:** Drastically reduces query latency, database load, and server memory consumption.
+### 🚀 2. Zero N+1 Queries via Relational Database Joins
+Instead of firing N+1 sequential database requests to fetch issues and map their respective user information, the data layer utilizes optimized SQL `JOIN` statements inside a single roundtrip query:
+```sql
+SELECT 
+  i.id, i.title, i.description, i.type, i.status, i.created_at, i.updated_at,
+  u.id AS reporter_id, u.name AS reporter_name, u.role AS reporter_role
+FROM issues i
+JOIN users u ON i.reporter_id = u.id
+ORDER BY i.created_at DESC;
+```
+* **Impact:** Reduced query latency, minimum network overhead, and optimized server memory consumption.
 
 ### ⏱️ 3. Safe Asynchronous Startup Sequence
-- **Awaited Initialization:** Converted the application startup entry point (`server.ts`) to be fully `async`/`await` compliant.
-- **Proper Order:** Ensures all PostgreSQL tables are successfully created/verified *before* the server starts listening for incoming client requests, preventing race conditions or database connection drops during initial hits.
+The server bootstrap process in `server.ts` is fully `async`/`await` compliant. It ensures the PostgreSQL database pool connects and required relational tables are created and verified *before* the Express server begins listening for requests.
+* **Impact:** Zero race conditions or failed requests during application boot up.
 
-### 📁 4. Modern Configuration Architecture
-- **Environment Isolation:** Clean named `env` exports in `envConfig.ts` instead of generic, bulky default exports.
-- **Auto-Timestamping:** Seamlessly updates the `updated_at` column to `CURRENT_TIMESTAMP` on all issue modifications, maintaining database accuracy.
-
----
-
-## 🛠️ Technology Stack
-* **Runtime**: Node.js LTS (v24.x or higher)
-* **Language**: TypeScript
-* **Framework**: Express.js (Modular router architecture)
-* **Database**: PostgreSQL (Native `pg` driver, raw SQL queries without ORMs/Query Builders)
-* **Security**: `bcrypt` (Password hashing) & `jsonwebtoken` (JWT authentication)
-* **Status Codes**: `http-status-codes`
+### 🛠️ 4. Dynamic SQL Query Generation for Updates
+The UPDATE endpoint supports partial updates where users can pass any combination of fields (`title`, `description`, `type`, `status`). The service dynamically builds safe parametrized raw SQL queries avoiding SQL injection:
+```typescript
+const fields = [];
+const params = [];
+if (title) { fields.push(`title = $${count++}`); params.push(title); }
+if (description) { fields.push(`description = $${count++}`); params.push(description); }
+// ...
+const sql = `UPDATE issues SET ${fields.join(', ')} WHERE id = $${count} RETURNING *`;
+```
 
 ---
 
-## 👥 User Roles & Permissions
+## 🏗️ System Architecture
 
-| Role | Permissions |
-| :--- | :--- |
-| **contributor** | • Register & login<br>• Create new issues (bug or feature request)<br>• View all issues/details<br>• Update own issues (only if status is still "open") |
-| **maintainer** | • All contributor permissions<br>• Update any issue field / status<br>• Delete any issue<br>• Access system metrics |
+The following diagram illustrates the modular architectural hierarchy, request flows, and middleware injection:
 
----
-
-## 🗄️ Database Schema
-
-### `users` Table
-* **id**: `SERIAL PRIMARY KEY`
-* **name**: `VARCHAR(255)`
-* **email**: `VARCHAR(255) UNIQUE NOT NULL`
-* **password**: `TEXT NOT NULL`
-* **role**: `VARCHAR(255) NOT NULL DEFAULT 'contributor' CHECK (role IN ('contributor', 'maintainer'))`
-* **created_at / updated_at**: `TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP`
-
-### `issues` Table
-* **id**: `SERIAL PRIMARY KEY`
-* **title**: `VARCHAR(255) NOT NULL`
-* **description**: `TEXT NOT NULL`
-* **type**: `VARCHAR(255) NOT NULL CHECK (type IN ('bug', 'feature_request'))`
-* **status**: `VARCHAR(255) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved'))`
-* **reporter_id**: `INT NOT NULL` (references `users.id`)
-* **created_at / updated_at**: `TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP`
+```mermaid
+graph TD
+    Client[Client Browser / Postman] -->|HTTP Request| App[Express App Entry]
+    App -->|CORS / JSON Parsing| GlobalMiddleware[Global Middlewares]
+    GlobalMiddleware --> Router{Modular App Router}
+    
+    Router -->|/api/auth| AuthRouter[Auth Router]
+    Router -->|/api/issues| IssueRouter[Issue Router]
+    
+    AuthRouter --> AuthController[Auth Controller]
+    AuthController --> AuthService[Auth Service]
+    AuthService --> DB[(PostgreSQL Database)]
+    
+    IssueRouter -->|JWT Auth Middleware| Authenticate[Authenticate Middleware]
+    Authenticate -->|RBAC Filter| Authorize[Authorize Middleware]
+    Authorize --> IssueController[Issue Controller]
+    IssueController --> IssueService[Issue Service]
+    IssueService --> DB
+    
+    App -->|Uncaught Exception| ErrorHandler[Global Error Handler]
+```
 
 ---
 
-## 🏁 Setup & Installation
+## 🗄️ Database Schema & Relationships
+
+The database is built on top of relational PostgreSQL tables with enforced constraints and check checks.
+
+### Entity-Relationship Diagram (ERD)
+
+```mermaid
+erDiagram
+    users ||--o{ issues : "creates / reports"
+    users {
+        int id PK "SERIAL"
+        string name "VARCHAR(255)"
+        string email UK "VARCHAR(255) UNIQUE NOT NULL"
+        string password "TEXT NOT NULL"
+        string role "VARCHAR(255) DEFAULT 'contributor'"
+        timestamp created_at "WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP"
+        timestamp updated_at "WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP"
+    }
+    issues {
+        int id PK "SERIAL"
+        string title "VARCHAR(255) NOT NULL"
+        string description "TEXT NOT NULL"
+        string type "VARCHAR(255) CHECK (type IN ('bug', 'feature_request'))"
+        string status "VARCHAR(255) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved'))"
+        int reporter_id FK "INT REFERENCES users(id)"
+        timestamp created_at "WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP"
+        timestamp updated_at "WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP"
+    }
+```
+
+---
+
+## 👥 Role-Based Access Matrix
+
+| Feature / Action | Contributor | Maintainer | Access Rules |
+| :--- | :---: | :---: | :--- |
+| **User Sign Up / Login** | ✔ | ✔ | Public access |
+| **Create New Issues** | ✔ | ✔ | Requires valid authentication |
+| **View Issues List** | ✔ | ✔ | Public access (sortable & filterable) |
+| **View Single Issue Details**| ✔ | ✔ | Public access |
+| **Update Own Issues** | ✔ | ✔ | Contributor can *only* update if issue status is `'open'` |
+| **Update Any Issue Field** | ✖ | ✔ | Maintainers can modify all fields & transition statuses |
+| **Delete Any Issue** | ✖ | ✔ | Strictly restricted to Maintainers |
+
+---
+
+## 🛠️ Setup & Installation
 
 ### 1. Prerequisites
-Ensure you have **Node.js** and a running **PostgreSQL** database.
+Ensure you have **Node.js** (v18.x or higher) and a running instance of **PostgreSQL**.
 
-### 2. Install Dependencies
+### 2. Clone the Repository & Install Dependencies
 ```bash
+git clone https://github.com/amdadislam01/level-2_assignment-2.git
+cd level-2_assignment-2
 npm install
 ```
 
-### 3. Environment Variables (`.env`)
-Create a `.env` file in the root directory and add the following keys:
+### 3. Configure Environment Variables
+Create a `.env` file in the root folder of the project and populate it with the following:
 ```env
 PORT=5000
-DATABASE_URL=your_postgresql_connection_string
-JWT_SECRET=your_super_secret_jwt_key
+DATABASE_URL=postgresql://your_db_user:your_db_password@your_db_host:5432/your_db_name?sslmode=require
+JWT_SECRET=your_super_complex_jwt_secret_key
 JWT_EXPIRES_IN=1d
 ```
+> [!NOTE]
+> The database pool automatically manages SSL configurations: it disables SSL verification when pointing to `localhost` or `127.0.0.1`, and secures connections using `{ rejectUnauthorized: false }` for cloud databases like Supabase/Neon.
 
-### 4. Run the Application
-* **Development Mode** (with auto-reload):
+### 4. Database Table Initialization
+On server boot, the application automatically executes migrations using raw queries. There is no need to manually import `.sql` files.
+
+### 5. Running the App
+* **Development Mode** (Hot-reloading via `tsx` watch):
   ```bash
   npm run dev
   ```
-* **Build TypeScript**:
+* **Production Build**:
   ```bash
   npm run build
   ```
@@ -115,109 +176,181 @@ JWT_EXPIRES_IN=1d
 
 ## 🌐 API Endpoints Specification
 
-### 🔹 Authentication Module
+### 🔐 1. Authentication Module
 
-#### 1. User Registration
-* **Endpoint**: `POST /api/auth/signup`
-* **Access**: Public
-* **Request Body**:
-  ```json
-  {
-    "name": "John Doe",
-    "email": "john.doe@devpulse.com",
-    "password": "securePassword123",
-    "role": "contributor"
+#### A. User Registration (`POST /api/auth/signup`)
+* **Access Level:** Public
+* **Request Body:**
+```json
+{
+  "name": "Alex Mercer",
+  "email": "alex.mercer@devpulse.com",
+  "password": "Password123",
+  "role": "contributor"
+}
+```
+* **Success Response (201 Created):**
+```json
+{
+  "success": true,
+  "message": "User registered successfully",
+  "data": {
+    "id": 1,
+    "name": "Alex Mercer",
+    "email": "alex.mercer@devpulse.com",
+    "role": "contributor",
+    "created_at": "2026-05-23T11:00:00.000Z",
+    "updated_at": "2026-05-23T11:00:00.000Z"
   }
-  ```
-* **Success Response (201 Created)**:
-  ```json
-  {
-    "success": true,
-    "message": "User registered successfully",
-    "data": {
+}
+```
+
+#### B. User Login (`POST /api/auth/login`)
+* **Access Level:** Public
+* **Request Body:**
+```json
+{
+  "email": "alex.mercer@devpulse.com",
+  "password": "Password123"
+}
+```
+* **Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "User logged in successfully",
+  "data": {
+    "user": {
       "id": 1,
-      "name": "John Doe",
-      "email": "john.doe@devpulse.com",
+      "name": "Alex Mercer",
+      "email": "alex.mercer@devpulse.com",
       "role": "contributor",
-      "created_at": "2026-05-20T22:00:00Z",
-      "updated_at": "2026-05-20T22:00:00Z"
-    }
+      "created_at": "2026-05-23T11:00:00.000Z",
+      "updated_at": "2026-05-23T11:00:00.000Z"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwibmFtZSI6IkFsZXggTWVyY2VyIiwicm9sZSI6ImNvbnRyaWJ1dG9yIiwiaWF0IjoxNzEzNDg3NjA4LCJleHAiOjE3MTM1NzQwMDh9.xxxx..."
   }
-  ```
-
-#### 2. User Login
-* **Endpoint**: `POST /api/auth/login`
-* **Access**: Public
-* **Request Body**:
-  ```json
-  {
-    "email": "john.doe@devpulse.com",
-    "password": "securePassword123"
-  }
-  ```
-* **Success Response (200 OK)**:
-  ```json
-  {
-    "success": true,
-    "message": "User logged in successfully",
-    "data": {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-      "user": {
-        "id": 1,
-        "name": "John Doe",
-        "email": "john.doe@devpulse.com",
-        "role": "contributor",
-        "created_at": "2026-05-20T22:00:00Z",
-        "updated_at": "2026-05-20T22:00:00Z"
-      }
-    }
-  }
-  ```
+}
+```
 
 ---
 
-### 🔹 Issues Module
+### 📋 2. Issues Module
 
-#### 3. Create Issue
-* **Endpoint**: `POST /api/issues`
-* **Access**: Authenticated users (`contributor`, `maintainer`)
-* **Headers**: `Authorization: Bearer <JWT_TOKEN>`
-* **Request Body**:
-  ```json
-  {
-    "title": "Database connection timeout under load",
-    "description": "Pool exhausts after 50+ concurrent queries, causing 500 errors",
-    "type": "bug"
+#### A. Create Issue (`POST /api/issues`)
+* **Access Level:** Authenticated (`contributor` or `maintainer`)
+* **Headers:** `Authorization: Bearer <JWT_TOKEN>`
+* **Request Body:**
+```json
+{
+  "title": "Token refresh returns 403 under network jitter",
+  "description": "Auth client gets stuck when switching connections, causing false positive logouts.",
+  "type": "bug"
+}
+```
+* **Success Response (201 Created):**
+```json
+{
+  "success": true,
+  "message": "Issue created successfully",
+  "data": {
+    "id": 10,
+    "title": "Token refresh returns 403 under network jitter",
+    "description": "Auth client gets stuck when switching connections, causing false positive logouts.",
+    "type": "bug",
+    "status": "open",
+    "reporter_id": 1,
+    "created_at": "2026-05-23T11:15:00.000Z",
+    "updated_at": "2026-05-23T11:15:00.000Z"
   }
-  ```
+}
+```
 
-#### 4. Get All Issues
-* **Endpoint**: `GET /api/issues`
-* **Access**: Public
-* **Query Parameters**:
+#### B. Get All Issues (`GET /api/issues`)
+* **Access Level:** Public
+* **Supported Query Parameters:**
   * `sort`: `newest` (default) or `oldest`
   * `type`: `bug` or `feature_request`
-  * `status`: `open`, `in_progress`, or `resolved`
+  * `status`: `open`, `in_progress` or `resolved`
+* **Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 10,
+      "title": "Token refresh returns 403 under network jitter",
+      "description": "Auth client gets stuck when switching connections, causing false positive logouts.",
+      "type": "bug",
+      "status": "open",
+      "created_at": "2026-05-23T11:15:00.000Z",
+      "updated_at": "2026-05-23T11:15:00.000Z",
+      "reporter": {
+        "id": 1,
+        "name": "Alex Mercer"
+      }
+    }
+  ]
+}
+```
 
-#### 5. Get Single Issue
-* **Endpoint**: `GET /api/issues/:id`
-* **Access**: Public
-
-#### 6. Update Issue
-* **Endpoint**: `PATCH /api/issues/:id`
-* **Access**: `maintainer` (any issue) OR `contributor` (own issues only, and only if current status is `"open"`)
-* **Headers**: `Authorization: Bearer <JWT_TOKEN>`
-* **Request Body** (All fields optional):
-  ```json
-  {
-    "title": "Updated title",
-    "description": "Updated description with new details",
+#### C. Get Single Issue by ID (`GET /api/issues/:id`)
+* **Access Level:** Public
+* **Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 10,
+    "title": "Token refresh returns 403 under network jitter",
+    "description": "Auth client gets stuck when switching connections, causing false positive logouts.",
     "type": "bug",
-    "status": "in_progress"
+    "status": "open",
+    "created_at": "2026-05-23T11:15:00.000Z",
+    "updated_at": "2026-05-23T11:15:00.000Z",
+    "reporter": {
+      "id": 1,
+      "name": "Alex Mercer",
+      "role": "contributor"
+    }
   }
-  ```
+}
+```
 
-#### 7. Delete Issue
-* **Endpoint**: `DELETE /api/issues/:id`
-* **Access**: `maintainer` only
-* **Headers**: `Authorization: Bearer <JWT_TOKEN>`
+#### D. Update Issue (`PATCH /api/issues/:id`)
+* **Access Level:** Authenticated (`contributor` (own issues only, only if current status is `'open'`) or `maintainer` (any issue/field))
+* **Headers:** `Authorization: Bearer <JWT_TOKEN>`
+* **Request Body (Partial Update):**
+```json
+{
+  "status": "in_progress"
+}
+```
+* **Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Issue updated successfully",
+  "data": {
+    "id": 10,
+    "title": "Token refresh returns 403 under network jitter",
+    "description": "Auth client gets stuck when switching connections, causing false positive logouts.",
+    "type": "bug",
+    "status": "in_progress",
+    "reporter_id": 1,
+    "created_at": "2026-05-23T11:15:00.000Z",
+    "updated_at": "2026-05-23T11:20:00.000Z"
+  }
+}
+```
+
+#### E. Delete Issue (`DELETE /api/issues/:id`)
+* **Access Level:** Authenticated `maintainer` only
+* **Headers:** `Authorization: Bearer <JWT_TOKEN>`
+* **Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Issue deleted successfully"
+}
+```
