@@ -13,8 +13,8 @@ This application features a highly secure Role-Based Access Control (RBAC) authe
 ---
 
 ### 🌐 Deployment Links
-* **Live API Deployment:** [https://level-2-assignment-2-six.vercel.app/](https://level-2-assignment-2-six.vercel.app/)
-* **Health Check Endpoint:** [https://level-2-assignment-2-six.vercel.app/health](https://level-2-assignment-2-six.vercel.app/health)
+* **Live API Deployment:** [https://level-2-assignment-2-gilt.vercel.app/](https://level-2-assignment-2-gilt.vercel.app/)
+* **Health Check Endpoint:** [https://level-2-assignment-2-gilt.vercel.app/health](https://level-2-assignment-2-gilt.vercel.app/health)
 
 ---
 
